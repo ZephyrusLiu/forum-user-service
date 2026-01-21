@@ -48,13 +48,13 @@ def ping():
 def login():
     data = request.get_json()
     if not data:
-        return jsonify({"error": "Missing JSON body"}), 400
+        return jsonify({"message": "Missing JSON body"}), 400
 
     try:
         email = data["email"]
         passw = data["password"]
     except KeyError:
-        return jsonify({"error": "Missing fields"}), 400
+        return jsonify({"message": "Missing fields"}), 400
 
     message = {"message" : "Unexpected error"}
     message_code = 501
@@ -71,13 +71,13 @@ def login():
             ).first()
 
             if row is None:
-                return jsonify({"error": "Invalid credentials"}), 401
+                return jsonify({"message": "Invalid credentials"}), 401
 
             if row.status == "banned":
-                return jsonify({"error": "Account banned"}), 403
+                return jsonify({"message": "Account banned"}), 403
 
             if not check_password_hash(row.passHash, passw):
-                return jsonify({"error": "Invalid credentials"}), 401
+                return jsonify({"message": "Invalid credentials"}), 401
 
             JWT_SECRET = os.environ["JWT_SECRET"]
             JWT_ISSUER = "forum_user_service"
@@ -114,7 +114,7 @@ def verify_email():
     token = request.args.get("token", type=str)
 
     if token == None:
-        return jsonify({"error" : "Missing token"}), 400
+        return jsonify({"message" : "Missing token"}), 400
 
     entry = None
 
@@ -124,7 +124,7 @@ def verify_email():
             break
 
     if entry == None:
-        return jsonify({"error" : "Invalid token"}), 400
+        return jsonify({"message" : "Invalid token"}), 400
 
     user_id = entry["user_id"]
 
@@ -139,7 +139,7 @@ def verify_email():
 
             if not row:
                 active_tokens.remove(entry)
-                return jsonify({"error": "User not found"}), 404
+                return jsonify({"message": "User not found"}), 404
 
             result = conn.execute(
                 update(users_table)
@@ -148,7 +148,7 @@ def verify_email():
             )
 
             if result.rowcount != 1:
-                return jsonify({"error": "Verification failed"}), 500
+                return jsonify({"message": "Verification failed"}), 500
 
         active_tokens.remove(entry)
 
@@ -175,7 +175,7 @@ def register():
         passHash = generate_password_hash(passw)
 
     except KeyError:
-        return jsonify({"error" : "Missing fields"}), 400
+        return jsonify({"message" : "Missing fields"}), 400
 
 
     message = {"message" : "Unexpected error"}
