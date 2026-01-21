@@ -19,7 +19,7 @@ import code
 from user_db import engine, users_table
 from rmq import get_rmq_channel, publish_event
 
-JWT_SECRET = os.environ["JWT_SECRET"]
+
 app = Flask(__name__)
 
 active_tokens = [] #TODO: expire tokens after 15 minutes
@@ -40,9 +40,71 @@ def handle_email(user_id, email):
     if token != None:
         active_tokens.append({"user_id" : user_id, "token" : token})
 
+@app.route("/users/ping",methods = ["GET"])
+def ping():
+    return jsonify({"message" : "pong"}), 200
+
+@app.route("/users/login",methods = ["POST"])
+def login():
+    data = request.get_json()
+    if not data:
+        return jsonify({"message": "Missing JSON body"}), 400
+
+    try:
+        email = data["email"]
+        passw = data["password"]
+    except KeyError:
+        return jsonify({"message": "Missing fields"}), 400
+
+    message = {"message" : "Unexpected error"}
+    message_code = 501
+
+    try:
+        with engine.connect() as conn:
+            row = conn.execute(
+                select(
+                    users_table.c.id,
+                    users_table.c.passHash,
+                    users_table.c.status,
+                    users_table.c.type
+                ).where(users_table.c.email == email)
+            ).first()
+
+            if row is None:
+                return jsonify({"message": "Invalid credentials"}), 401
+
+            if row.status == "banned":
+                return jsonify({"message": "Account banned"}), 403
+
+            if not check_password_hash(row.passHash, passw):
+                return jsonify({"message": "Invalid credentials"}), 401
+
+            JWT_SECRET = os.environ["JWT_SECRET"]
+            JWT_ISSUER = "forum_user_service"
+
+            token = jwt.encode(
+                {
+                    "sub": str(row.id),
+                    "iss": JWT_ISSUER,
+
+                    "id": row.id,
+                    "type": row.type,
+                    "status": row.status,
+                },
+                JWT_SECRET,
+                algorithm="HS256"
+            )
+            
+            message["token"], message["message"], message_code = token, "Login successful", 200
+
+    except Exception:
+        app.logger.exception("login failed")
+        message["message"], message_code = token, "Database error", 503
+
+    return jsonify(message), message_code
 
 
-@app.route("/health")
+@app.route("/users/health")
 def health():
     return jsonify({"ok" : True, "message" : "system normal"}), 200
 
@@ -52,7 +114,7 @@ def verify_email():
     token = request.args.get("token", type=str)
 
     if token == None:
-        return jsonify({"error" : "Missing token"}), 400
+        return jsonify({"message" : "Missing token"}), 400
 
     entry = None
 
@@ -62,7 +124,7 @@ def verify_email():
             break
 
     if entry == None:
-        return jsonify({"error" : "Invalid token"}), 400
+        return jsonify({"message" : "Invalid token"}), 400
 
     user_id = entry["user_id"]
 
@@ -77,7 +139,7 @@ def verify_email():
 
             if not row:
                 active_tokens.remove(entry)
-                return jsonify({"error": "User not found"}), 404
+                return jsonify({"message": "User not found"}), 404
 
             result = conn.execute(
                 update(users_table)
@@ -86,7 +148,7 @@ def verify_email():
             )
 
             if result.rowcount != 1:
-                return jsonify({"error": "Verification failed"}), 500
+                return jsonify({"message": "Verification failed"}), 500
 
         active_tokens.remove(entry)
 
@@ -113,7 +175,7 @@ def register():
         passHash = generate_password_hash(passw)
 
     except KeyError:
-        return jsonify({"error" : "Missing fields"}), 400
+        return jsonify({"message" : "Missing fields"}), 400
 
 
     message = {"message" : "Unexpected error"}
