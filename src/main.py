@@ -6,43 +6,50 @@ load_dotenv(Path(__file__).resolve().parents[1].joinpath(".env"), override=True)
 
 import os
 from flask import Flask, request, jsonify, abort
-from sqlalchemy import select, insert, update
+from sqlalchemy import select, insert, update, bindparam
 from sqlalchemy.exc import IntegrityError, DBAPIError
 from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
 
 import secrets
+import random
 
 #for debugging only
 import code
 
-from user_db import engine, users_table
-from rmq import get_rmq_channel, publish_event
+from .user_db import engine, users_table, media_table
+from .rmq import get_rmq_channel, publish_event
 
-from message import RMessage, RErrorMessage
+from utils.python.message import RMessage, RErrorMessage, RResponse
 
 #TODO: blueprints for private and public routes?
 
 
 app = Flask(__name__)
 
+JWT_ISSUER = "forum_user_service"
 active_tokens = [] #TODO: expire tokens after 15 minutes
-
 
 #code.interact(local=locals())
 
-def handle_email(user_id, email):
+def _handle_email(user_id, email):
+
+    generate_code = lambda length : str(random.randint(0, 10**length - 1)).zfill(length)
+
     token = None
     try:
         token = secrets.token_urlsafe(32)
+        alt_code = generate_code(5)
         publish_event("user.verify_email", 
-                      {"userID" : user_id, "email" : email, "token" : token})
+                      {"userID" : user_id, "email" : email, "token" : token, "code" : alt_code})
 
     except Exception as e: #TODO: make db table of emails to queue email sends?? or let unverified users to resend email??
+        print(f"Error: failed to queue verification email: {e}")
         token = None
 
     if token != None:
-        active_tokens.append({"user_id" : user_id, "token" : token})
+        active_tokens.append({"user_id" : user_id, "token" : token, "code" : alt_code})
+        print(f"active tokens now: {active_tokens}")
 
 #PUBLIC
 @app.route("/users/login",methods = ["POST"])
@@ -80,7 +87,6 @@ def login():
                 return RErrorMessage("Invalid credentials",401).get()
 
             JWT_SECRET = os.environ["JWT_SECRET"]
-            JWT_ISSUER = "forum_user_service"
 
             token = jwt.encode(
                 {
@@ -112,19 +118,22 @@ def health():
 @app.route("/users/verify", methods = ["GET"])
 def verify_email():
     token = request.args.get("token", type=str)
+    alt_code = request.args.get("code", type=str)
 
-    if token == None:
+    if token == None and alt_code == None:
         return RErrorMessage("Missing token",400).get()
 
     entry = None
 
+    print(f"active_tokens: {active_tokens}")
+
     for i,e in enumerate(active_tokens):
-        if token == e["token"]:
+        if token == e["token"] or alt_code == e["code"]:
             entry = e
             break
 
     if entry == None:
-        return RErrorMessage("Invalid token").get()
+        return RErrorMessage("Invalid token or code",400).get()
 
     user_id = entry["user_id"]
 
@@ -133,7 +142,11 @@ def verify_email():
     try:
         with engine.begin() as conn:
             row = conn.execute(
-                select(users_table.c.id).where(users_table.c.id == user_id)
+                select(
+                    users_table.c.id,
+                    users_table.c.type,
+                    users_table.c.status,
+                       ).where(users_table.c.id == user_id)
             ).first()
 
             if not row:
@@ -149,8 +162,23 @@ def verify_email():
             if result.rowcount != 1:
                 return RErrorMessage("Verification failed",500).get()
 
+
+            JWT_SECRET = os.environ["JWT_SECRET"]
+
+            jwt_token = jwt.encode(
+                    {
+                        "sub": str(row.id),
+                        "iss": JWT_ISSUER,
+                        "id": row.id,
+                        "type": row.type,
+                        "status": "active",
+                        },
+                    JWT_SECRET,
+                    algorithm="HS256",
+                    )
+
         active_tokens.remove(entry)
-        message = RMessage().msg("Email verified")
+        message = RMessage().msg("Email verified").add("token",jwt_token)
 
     except Exception:
         app.logger.exception("verify_email failed")
@@ -209,7 +237,7 @@ def register():
         message = RErrorMessage("Database error",503)
 
     if new_id != None:
-        handle_email(new_id, email)
+        _handle_email(new_id, email)
 
     
     return message.get()
@@ -226,19 +254,19 @@ def get_profile(user_id):
     message = RErrorMessage()
 
     stmt_user = select(
-        users.c.id,
-        users.c.firstName,
-        users.c.lastName,
-        users.c.joinDate,
-        users.c.type,
-        users.c.status,
-        users.c.profileMediaID
-    ).where(users.c.id == user_id)
+        users_table.c.id,
+        users_table.c.firstName,
+        users_table.c.lastName,
+        users_table.c.joinDate,
+        users_table.c.type,
+        users_table.c.status,
+        users_table.c.profileMediaID
+    ).where(users_table.c.id == user_id)
 
     stmt_media = select(
-        media.c.s3Bucket,
-        media.c.s3Key
-    ).where(media.c.id == bindparam("media_id"))
+        media_table.c.s3Bucket,
+        media_table.c.s3Key
+    ).where(media_table.c.id == bindparam("media_id"))
 
     try:
         with engine.begin() as conn:
@@ -260,21 +288,59 @@ def get_profile(user_id):
                         "s3Key": m["s3Key"]
                     }
 
-        return jsonify({
-            "id": user["id"],
-            "firstName": user["firstName"],
-            "lastName": user["lastName"],
-            "joinDate": user["joinDate"].isoformat(),
-            "type": user["type"],
-            "status": user["status"],
-            "profileMediaID": user["profileMediaID"],
-            "profileMedia": profile_media
-        }), 200
+        return RResponse().add("id",user["id"]).\
+                add("firstName",user["firstName"]).\
+                add("lastName",user["lastName"]).\
+                add("joinDate",user["joinDate"].isoformat()).\
+                add("type",user["type"]).\
+                add("status",user["status"]).\
+                add("profileMediaID",user["profileMediaID"]).\
+                add("profileMedia",profile_media).get()
 
     except DBAPIError:
         message = RErrorMessage("Database error",503)
 
     return message.get()
+
+@app.route("/users/<int:user_id>/profile", methods=["PUT"])
+def update_profile(user_id):
+    data = request.get_json()
+    if not data or "profileMediaID" not in data:
+        return RErrorMessage("Missing profileMediaID", 400).get()
+
+    media_id = data["profileMediaID"]
+
+    try:
+        with engine.begin() as conn:
+            user = conn.execute(
+                select(users_table.c.id)
+                .where(users_table.c.id == user_id)
+            ).first()
+
+            if not user:
+                return RErrorMessage("User not found", 404).get()
+
+            media = conn.execute(
+                select(media_table.c.id)
+                .where(
+                    media_table.c.id == media_id,
+                    media_table.c.userID == user_id
+                )
+            ).first()
+
+            if not media:
+                return RErrorMessage("Invalid profile media", 400).get()
+
+            conn.execute(
+                update(users_table)
+                .where(users_table.c.id == user_id)
+                .values(profileMediaID=media_id)
+            )
+
+        return RMessage().info("Profile updated").get()
+
+    except DBAPIError:
+        return RErrorMessage("Database error", 503).get()
 
 if __name__ == "__main__":
     app.run(port=5001, debug=True)
