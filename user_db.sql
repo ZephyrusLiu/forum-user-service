@@ -21,15 +21,34 @@ SET @@SESSION.SQL_LOG_BIN= 0;
 -- GTID state at the beginning of the backup 
 --
 
-SET @@GLOBAL.GTID_PURGED=/*!80000 '+'*/ 'e22e9e32-dd1f-11f0-88a9-a8595ff81faf:1-322';
+SET @@GLOBAL.GTID_PURGED=/*!80000 '+'*/ 'e22e9e32-dd1f-11f0-88a9-a8595ff81faf:1-343';
 
 --
--- Current Database: `forum_user_service`
+-- Table structure for table `media`
 --
 
-CREATE DATABASE /*!32312 IF NOT EXISTS*/ `forum_user_service` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci */ /*!80016 DEFAULT ENCRYPTION='N' */;
+DROP TABLE IF EXISTS `media`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `media` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `userID` int NOT NULL,
+  `s3Bucket` varchar(255) NOT NULL,
+  `s3Key` varchar(1024) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `fk_media_user` (`userID`),
+  CONSTRAINT `fk_media_user` FOREIGN KEY (`userID`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
-USE `forum_user_service`;
+--
+-- Dumping data for table `media`
+--
+
+LOCK TABLES `media` WRITE;
+/*!40000 ALTER TABLE `media` DISABLE KEYS */;
+/*!40000 ALTER TABLE `media` ENABLE KEYS */;
+UNLOCK TABLES;
 
 --
 -- Table structure for table `users`
@@ -49,8 +68,10 @@ CREATE TABLE `users` (
   `passHash` varchar(255) NOT NULL,
   `profileMediaID` int DEFAULT NULL,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `email` (`email`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  UNIQUE KEY `email` (`email`),
+  KEY `fk_users_profile_media` (`profileMediaID`),
+  CONSTRAINT `fk_users_profile_media` FOREIGN KEY (`profileMediaID`) REFERENCES `media` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -72,4 +93,4 @@ SET @@SESSION.SQL_LOG_BIN = @MYSQLDUMP_TEMP_LOG_BIN;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-01-19 16:53:05
+-- Dump completed on 2026-01-21 13:52:49

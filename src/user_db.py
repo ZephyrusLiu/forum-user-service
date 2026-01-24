@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Table, Column, Integer, String, MetaData, DateTime, Enum
+from sqlalchemy import create_engine, Table, Column, Integer, String, MetaData, DateTime, Enum, ForeignKey
 from sqlalchemy.sql import func
 import os
 
@@ -26,5 +26,20 @@ users_table = Table(
         Column("type", Enum("user", "admin", "super_admin"), nullable=False, server_default="user"),
         Column("status", Enum("active", "banned", "unverified"), nullable=False, server_default="unverified"),
         Column("passHash", String(255), nullable=False),
-        Column("profileMediaID", Integer, nullable=True),
+        Column("profileMediaID", Integer, ForeignKey("media.id", ondelete="SET NULL"), nullable=True),
         )
+
+
+media_table = Table(
+    "media",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column(
+        "userID",
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False
+    ),
+    Column("s3Bucket", String(255), nullable=False),
+    Column("s3Key", String(1024), nullable=False),
+)

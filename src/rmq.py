@@ -9,28 +9,25 @@ _rmq_channel = None
 def _init_rmq():
     global _rmq_connection, _rmq_channel
 
-    creds = pika.PlainCredentials(
-        os.environ["RABBITMQ_USER"],
-        os.environ["RABBITMQ_PASS"],
-    )
+    rabbitmq_uri = os.environ.get("RABBITMQ_URI")
+    if not rabbitmq_uri:
+        raise RuntimeError("RABBITMQ_URI is not set")
 
-    params = pika.ConnectionParameters(
-        host=os.environ["RABBITMQ_HOST"],
-        virtual_host=os.environ.get("RABBITMQ_VHOST", "/"),
-        credentials=creds,
-        heartbeat=60,
-        blocked_connection_timeout=30,
-    )
+    params = pika.URLParameters(rabbitmq_uri)
+    params.heartbeat = 60
+    params.blocked_connection_timeout = 30
 
     _rmq_connection = pika.BlockingConnection(params)
     _rmq_channel = _rmq_connection.channel()
 
-    exchange = os.environ.get("RABBITMQ_EXCHANGE", "forum.events")
+    exchange = os.environ.get("RABBITMQ_USER_EXCHANGE", "forum.events")
+    print(f"USING EXCHANGE {exchange}")
     _rmq_channel.exchange_declare(
         exchange=exchange,
         exchange_type="topic",
         durable=True,
     )
+
 
 def get_rmq_channel():
     global _rmq_connection, _rmq_channel
@@ -40,9 +37,10 @@ def get_rmq_channel():
 
     return _rmq_channel
 
-def publish_event(routing_key: str, payload: dict) -> None:
+def publish_event(routing_key: str, payload: dict):
     ch = get_rmq_channel()
-    exchange = os.environ.get("RABBITMQ_EXCHANGE", "forum.events")
+    exchange = os.environ.get("RABBITMQ_USER_EXCHANGE", "forum.events")
+    print(f"USING EXCHANGE {exchange}")
 
     body = json.dumps(payload).encode("utf-8")
 
