@@ -14,6 +14,7 @@ from utils.python.message import RMessage, RErrorMessage, RResponse
 
 public_bp = Blueprint("public",__name__,url_prefix= "/users/")
 
+JWT_SECRET = os.environ["JWT_SECRET"]
 JWT_ISSUER = "forum_user_service"
 active_tokens = [] #TODO: expire tokens after 15 minutes
 
@@ -70,7 +71,6 @@ def login():
             if not check_password_hash(row.passHash, passw):
                 return RErrorMessage("Invalid credentials",401).get()
 
-            JWT_SECRET = os.environ["JWT_SECRET"]
 
             token = jwt.encode(
                 {
@@ -147,7 +147,6 @@ def verify_email():
                 return RErrorMessage("Verification failed",500).get()
 
 
-            JWT_SECRET = os.environ["JWT_SECRET"]
 
             jwt_token = jwt.encode(
                     {
