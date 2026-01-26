@@ -3,7 +3,7 @@ from sqlalchemy import select, insert, update, bindparam
 from sqlalchemy.exc import IntegrityError, DBAPIError
 from werkzeug.security import generate_password_hash
 
-from ..user_db import engine, users_table, media_table
+from ..user_db import engine, users_table
 from .common import get_jwt_token, handle_email
 from utils.python.message import RMessage, RErrorMessage, RResponse
 from utils.python.auth import login_required
@@ -85,12 +85,8 @@ def get_profile(user_id):
         users_table.c.joinDate,
         users_table.c.type,
         users_table.c.status,
-        users_table.c.profileMediaID
+        users_table.c.profileS3Key,
     ).where(users_table.c.id == user_id)
-
-    stmt_media = select(
-        media_table.c.s3Key
-    ).where(media_table.c.id == bindparam("media_id"))
 
     with engine.begin() as conn:
         user = conn.execute(stmt_user).mappings().first()
@@ -98,24 +94,13 @@ def get_profile(user_id):
         if not user:
             return RErrorMessage("User not found", 404).get()
 
-        profile_media = current_app.config["DEFAULT_PROFILE_KEY"]
-
-        if user["profileMediaID"] is not None:
-            m = conn.execute(
-                stmt_media,
-                {"media_id": user["profileMediaID"]}
-            ).mappings().first()
-
-            if m:
-                profile_media = m["s3Key"]
-
         return RResponse().add("id", user["id"]) \
             .add("firstName", user["firstName"]) \
             .add("lastName", user["lastName"]) \
             .add("joinDate", user["joinDate"].isoformat()) \
             .add("type", user["type"]) \
             .add("status", user["status"]) \
-            .add("profileMedia", profile_media) \
+            .add("profileS3Key", user["profileS3Key"]) \
             .get()
 
 
@@ -138,6 +123,7 @@ def update_user(user_id):
         "email": data.get("email"),
         "type": data.get("type"),
         "status": data.get("status"),
+        "profileS3Key": data.get("profileS3Key"),
         "passHash": generate_password_hash(password) if password is not None else None,
     }
 

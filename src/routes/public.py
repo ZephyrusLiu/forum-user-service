@@ -3,16 +3,12 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy import select, insert, update, bindparam
 from sqlalchemy.exc import IntegrityError, DBAPIError
 
-from ..user_db import engine, users_table, media_table
-from .common import get_jwt_token, handle_email
-from ..rmq import get_rmq_channel, publish_event
+from ..user_db import engine, users_table
+from .common import get_jwt_token, handle_email, active_tokens
 from utils.python.message import RMessage, RErrorMessage, RResponse
 
 
 public_bp = Blueprint("public",__name__,url_prefix= "/users/")
-
-active_tokens = [] #TODO: expire tokens after 15 minutes
-
 
 
 @public_bp.route("/login",methods = ["POST"])

@@ -31,8 +31,6 @@ app.register_blueprint(public_bp)
 app.register_blueprint(private_bp)
 
 
-#PRIVATE
-
 if __name__ == "__main__":
     app.run(port=5001, debug=True)
 

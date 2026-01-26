@@ -21,34 +21,7 @@ SET @@SESSION.SQL_LOG_BIN= 0;
 -- GTID state at the beginning of the backup 
 --
 
-SET @@GLOBAL.GTID_PURGED=/*!80000 '+'*/ 'e22e9e32-dd1f-11f0-88a9-a8595ff81faf:1-343';
-
---
--- Table structure for table `media`
---
-
-DROP TABLE IF EXISTS `media`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `media` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `userID` int NOT NULL,
-  `s3Bucket` varchar(255) NOT NULL,
-  `s3Key` varchar(1024) NOT NULL,
-  PRIMARY KEY (`id`),
-  KEY `fk_media_user` (`userID`),
-  CONSTRAINT `fk_media_user` FOREIGN KEY (`userID`) REFERENCES `users` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Dumping data for table `media`
---
-
-LOCK TABLES `media` WRITE;
-/*!40000 ALTER TABLE `media` DISABLE KEYS */;
-/*!40000 ALTER TABLE `media` ENABLE KEYS */;
-UNLOCK TABLES;
+SET @@GLOBAL.GTID_PURGED=/*!80000 '+'*/ 'e22e9e32-dd1f-11f0-88a9-a8595ff81faf:1-385';
 
 --
 -- Table structure for table `users`
@@ -66,22 +39,11 @@ CREATE TABLE `users` (
   `type` enum('user','admin','super') NOT NULL DEFAULT 'user',
   `status` enum('active','banned','unverified') NOT NULL DEFAULT 'unverified',
   `passHash` varchar(255) NOT NULL,
-  `profileMediaID` int DEFAULT NULL,
+  `profileS3Key` varchar(1024) NOT NULL DEFAULT 'users/2/avatar/204351e0-3360-4a61-a15b-48aa9899b3c1_test.jpg',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `email` (`email`),
-  KEY `fk_users_profile_media` (`profileMediaID`),
-  CONSTRAINT `fk_users_profile_media` FOREIGN KEY (`profileMediaID`) REFERENCES `media` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  UNIQUE KEY `email` (`email`)
+) ENGINE=InnoDB AUTO_INCREMENT=20 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Dumping data for table `users`
---
-
-LOCK TABLES `users` WRITE;
-/*!40000 ALTER TABLE `users` DISABLE KEYS */;
-/*!40000 ALTER TABLE `users` ENABLE KEYS */;
-UNLOCK TABLES;
 SET @@SESSION.SQL_LOG_BIN = @MYSQLDUMP_TEMP_LOG_BIN;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
@@ -93,4 +55,4 @@ SET @@SESSION.SQL_LOG_BIN = @MYSQLDUMP_TEMP_LOG_BIN;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-01-21 13:52:49
+-- Dump completed on 2026-01-26 13:10:02
