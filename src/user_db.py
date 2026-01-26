@@ -16,29 +16,20 @@ engine = create_engine(get_db_url(), echo=True)
 metadata.create_all(engine)
 
 users_table = Table(
-        "users",
-        metadata,
-        Column("id", Integer, primary_key=True),
-        Column("firstName", String(100), nullable=False),
-        Column("lastName", String(100), nullable=False),
-        Column("joinDate", DateTime, server_default=func.now(), nullable=False),
-        Column("email", String(255), nullable=False, unique=True),
-        Column("type", Enum("user", "admin", "super_admin"), nullable=False, server_default="user"),
-        Column("status", Enum("active", "banned", "unverified"), nullable=False, server_default="unverified"),
-        Column("passHash", String(255), nullable=False),
-        Column("profileMediaID", Integer, ForeignKey("media.id", ondelete="SET NULL"), nullable=True),
-        )
-
-
-media_table = Table(
-    "media",
+    "users",
     metadata,
     Column("id", Integer, primary_key=True),
+    Column("firstName", String(100), nullable=False),
+    Column("lastName", String(100), nullable=False),
+    Column("joinDate", DateTime, server_default=func.now(), nullable=False),
+    Column("email", String(255), nullable=False, unique=True),
+    Column("type", Enum("user", "admin", "super"), nullable=False, server_default="user"),
+    Column("status", Enum("active", "banned", "unverified"), nullable=False, server_default="unverified"),
+    Column("passHash", String(255), nullable=False),
     Column(
-        "userID",
-        Integer,
-        ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False
+        "profileS3Key",
+        String(1024),
+        nullable=False,
+        server_default=os.environ["DEFAULT_PROFILE_KEY"]
     ),
-    Column("s3Key", String(1024), nullable=False),
 )

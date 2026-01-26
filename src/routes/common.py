@@ -2,6 +2,7 @@ import jwt
 import secrets
 import random
 from flask import current_app
+from ..rmq import publish_event
 
 
 def get_jwt_token(user_id, user_type, user_status):
@@ -24,6 +25,8 @@ def get_jwt_token(user_id, user_type, user_status):
             ) 
 
     return token
+
+active_tokens = [] #TODO: expire tokens after 15 minutes
 
 def handle_email(user_id, email):
     generate_code = lambda length : str(random.randint(0, 10**length - 1)).zfill(length)
