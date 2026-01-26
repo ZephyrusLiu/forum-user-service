@@ -1,12 +1,12 @@
-from flask import request, Blueprint
+from flask import request, Blueprint, current_app, g
 from sqlalchemy import select, insert, update, bindparam
 from sqlalchemy.exc import IntegrityError, DBAPIError
 from werkzeug.security import generate_password_hash
 
 from ..user_db import engine, users_table, media_table
+from .common import get_jwt_token, handle_email
 from utils.python.message import RMessage, RErrorMessage, RResponse
 from utils.python.auth import login_required
-from .public import _handle_email, JWT_SECRET, JWT_ISSUER
 
 private_bp = Blueprint("private",__name__,url_prefix= "/users/")
 
@@ -19,9 +19,9 @@ class Role(Enum):
     NA = -1
 
 
-def _get_role(token_info, other_id):
-    role = token_info.user["role"]
-    user_id = token_info.user["userId"]
+def _get_role(user, other_id):
+    role = user["role"]
+    user_id = int(user["userId"])
 
     match role:
         case "admin": return Role.Admin
@@ -42,9 +42,45 @@ def _is_barred(role, field):
 
 
 @private_bp.route("/ping",methods = ["GET"])
+@login_required
 def ping():
     return RMessage().msg("pong").get()
 
+
+
+@private_bp.route("/reverify",methods = ["POST"])
+@login_required
+def reverify():
+    data = request.get_json()
+
+    if not data:
+        return RErrorMessage("Missing JSON body",400).get()
+
+    try:
+        user_id = int(g.user["userId"])
+
+        stmt = select(
+            users_table.c.email,
+            users_table.c.status
+        ).where(users_table.c.id == user_id)
+
+        with engine.begin() as conn:
+            user = conn.execute(stmt).mappings().first()
+
+            if not user:
+                return RErrorMessage("User not found", 404).get()
+
+            if user["status"] != "unverified":
+                return RErrorMessage("User already verified", 400).get()
+
+            email = user["email"]
+
+        handle_email(user_id, email)
+
+        return RResponse().add("message", "Verification email resent").get()
+
+    except DBAPIError:
+        return RErrorMessage("Database error", 503).get()
 
 @private_bp.route("/<int:user_id>/profile",methods = ["GET"])
 @login_required
@@ -63,38 +99,35 @@ def get_profile(user_id):
     ).where(users_table.c.id == user_id)
 
     stmt_media = select(
-        media_table.c.s3Bucket,
         media_table.c.s3Key
     ).where(media_table.c.id == bindparam("media_id"))
 
     try:
         with engine.begin() as conn:
-            user = conn.execute(stmt_user).mprivate_bp.ngs().first()
+            user = conn.execute(stmt_user).mappings().first() 
 
             if not user:
                 return RErrorMessage("User not found",404).get()
 
-            profile_media = None
+
+            profile_media = current_app.config["DEFAULT_PROFILE_KEY"]
+
             if user["profileMediaID"] is not None:
                 m = conn.execute(
-                    stmt_media,
-                    {"media_id": user["profileMediaID"]}
-                ).mprivate_bp.ngs().first()
+                        stmt_media,
+                        {"media_id": user["profileMediaID"]}
+                         ).mappings().first()
 
                 if m:
-                    profile_media = {
-                        "s3Bucket": m["s3Bucket"],
-                        "s3Key": m["s3Key"]
-                    }
+                    profile_media = m["s3Key"]
 
-        return RResponse().add("id",user["id"]).\
-                add("firstName",user["firstName"]).\
-                add("lastName",user["lastName"]).\
-                add("joinDate",user["joinDate"].isoformat()).\
-                add("type",user["type"]).\
-                add("status",user["status"]).\
-                add("profileMediaID",user["profileMediaID"]).\
-                add("profileMedia",profile_media).get()
+            message = RResponse().add("id",user["id"]).\
+            add("firstName",user["firstName"]).\
+            add("lastName",user["lastName"]).\
+            add("joinDate",user["joinDate"].isoformat()).\
+            add("type",user["type"]).\
+            add("status",user["status"]).\
+            add("profileMedia",profile_media)
 
     except DBAPIError:
         message = RErrorMessage("Database error",503)
@@ -110,7 +143,9 @@ def update_user(user_id):
     if data is None:
         return RErrorMessage("Missing json body", 400).get()
 
-    role = _get_role(g, user_id)
+
+
+    role = _get_role(g.user, user_id)
     if role == Role.NA:
         return RErrorMessage(
             "You do not have authorization to make this change", 403
@@ -125,8 +160,13 @@ def update_user(user_id):
         "type": data.get("type"),
         "status": data.get("status"),
         "passHash": generate_password_hash(password) if password is not None else None,
-        # "profile_url": data.get("profileURL"),
     }
+
+    s3Key = None
+
+    if "s3Key" in update_fields:
+        s3Key = update_fields["s3Key"]
+        del update_fields["s3Key"]
 
     updates = {k: v for k, v in update_fields.items() if v is not None}
 
@@ -147,6 +187,15 @@ def update_user(user_id):
 
     try:
         with engine.begin() as conn:
+
+            if s3Key != None:
+                stmt = insert(media_table).values(userID= user_id, s3Key=se3Key)
+                result = conn.execute(stmt)
+                media_id = result. inserted_primary_key[0]
+
+                updates["profileMediaID"] = media_id
+
+
 
             if "status" in updates and role == Role.Admin:
                 target = conn.execute(
@@ -177,20 +226,8 @@ def update_user(user_id):
             message = RMessage()
 
             if to_send_email:
-                token = jwt_token.encode(
-                        {
-                            "sub": str(user_id),
-                            "iss": JWT_ISSUER,
-                            "id": user_id,
-                            "type": g.user["role"],
-                            "status": "unverified",
-                            },
-                        JWT_SECRET,
-                        algorithm="HS256",
-                        )
-
-                message.add("token",token)
-                _handle_email(user_id, updates["email"])
+                message.add("token",get_jwt_token())
+                handle_email(user_id, updates["email"])
 
         return message.msg("User updated").get()
 

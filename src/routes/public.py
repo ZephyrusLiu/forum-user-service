@@ -1,41 +1,19 @@
-from flask import request, Blueprint
-import os
+from flask import request, Blueprint, current_app
 from werkzeug.security import generate_password_hash, check_password_hash
-import jwt
-import secrets
-import random
 from sqlalchemy import select, insert, update, bindparam
 from sqlalchemy.exc import IntegrityError, DBAPIError
 
 from ..user_db import engine, users_table, media_table
+from .common import get_jwt_token, handle_email
 from ..rmq import get_rmq_channel, publish_event
 from utils.python.message import RMessage, RErrorMessage, RResponse
 
 
 public_bp = Blueprint("public",__name__,url_prefix= "/users/")
 
-JWT_SECRET = os.environ["JWT_SECRET"]
-JWT_ISSUER = "forum_user_service"
 active_tokens = [] #TODO: expire tokens after 15 minutes
 
-def _handle_email(user_id, email):
 
-    generate_code = lambda length : str(random.randint(0, 10**length - 1)).zfill(length)
-
-    token = None
-    try:
-        token = secrets.token_urlsafe(32)
-        alt_code = generate_code(5)
-        publish_event("user.verify_email", 
-                      {"userID" : user_id, "email" : email, "token" : token, "code" : alt_code})
-
-    except Exception as e: #TODO: make db table of emails to queue email sends?? or let unverified users to resend email??
-        print(f"Error: failed to queue verification email: {e}")
-        token = None
-
-    if token != None:
-        active_tokens.append({"user_id" : user_id, "token" : token, "code" : alt_code})
-        print(f"active tokens now: {active_tokens}")
 
 @public_bp.route("/login",methods = ["POST"])
 def login():
@@ -72,23 +50,10 @@ def login():
                 return RErrorMessage("Invalid credentials",401).get()
 
 
-            token = jwt.encode(
-                {
-                    "sub": str(row.id),
-                    "iss": JWT_ISSUER,
-
-                    "id": row.id,
-                    "type": row.type,
-                    "status": row.status,
-                },
-                JWT_SECRET,
-                algorithm="HS256"
-            )
-
-            message = RMessage().add("token",token)
+            message = RMessage().add("token",get_jwt_token(row.id,row.type,row.status))
             
     except Exception:
-        public_bp.logger.exception("login failed")
+        print("login failed")
         message = RErrorMessage("Database error",503)
 
     return message.get()
@@ -120,6 +85,7 @@ def verify_email():
         return RErrorMessage("Invalid token or code",400).get()
 
     user_id = entry["user_id"]
+    user_type = "unverified"
 
     message = RErrorMessage()
 
@@ -137,6 +103,8 @@ def verify_email():
                 active_tokens.remove(entry)
                 return RErrorMessage("User not found",404).get()
 
+            user_type = row.type
+
             result = conn.execute(
                 update(users_table)
                 .where(users_table.c.id == user_id)
@@ -148,20 +116,10 @@ def verify_email():
 
 
 
-            jwt_token = jwt.encode(
-                    {
-                        "sub": str(row.id),
-                        "iss": JWT_ISSUER,
-                        "id": row.id,
-                        "type": row.type,
-                        "status": "active",
-                        },
-                    JWT_SECRET,
-                    algorithm="HS256",
-                    )
 
         active_tokens.remove(entry)
-        message = RMessage().msg("Email verified").add("token",jwt_token)
+        message = RMessage().msg("Email verified").\
+                add("token",get_jwt_token(user_id,user_type,"active"))
 
     except Exception:
         public_bp.logger.exception("verify_email failed")
@@ -220,7 +178,7 @@ def register():
         message = RErrorMessage("Database error",503)
 
     if new_id != None:
-        _handle_email(new_id, email)
+        handle_email(new_id, email)
 
     
     return message.get()
