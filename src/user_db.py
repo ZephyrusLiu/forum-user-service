@@ -40,6 +40,5 @@ media_table = Table(
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False
     ),
-    Column("s3Bucket", String(255), nullable=False),
     Column("s3Key", String(1024), nullable=False),
 )
