@@ -48,9 +48,6 @@ def ping():
 @private_bp.route("/reverify", methods=["POST"])
 @login_required
 def reverify():
-    data = request.get_json()
-    if not data:
-        return RErrorMessage("Missing JSON body", 400).get()
 
     user_id = int(g.user["userId"])
 
@@ -82,6 +79,7 @@ def get_profile(user_id):
         users_table.c.id,
         users_table.c.firstName,
         users_table.c.lastName,
+        users_table.c.email,
         users_table.c.joinDate,
         users_table.c.type,
         users_table.c.status,
@@ -97,6 +95,7 @@ def get_profile(user_id):
         return RResponse().add("id", user["id"]) \
             .add("firstName", user["firstName"]) \
             .add("lastName", user["lastName"]) \
+            .add("email", user["email"]) \
             .add("joinDate", user["joinDate"].isoformat()) \
             .add("type", user["type"]) \
             .add("status", user["status"]) \

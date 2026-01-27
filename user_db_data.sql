@@ -36,6 +36,16 @@ CREATE TABLE `users` (
   UNIQUE KEY `email` (`email`)
 ) ENGINE=InnoDB AUTO_INCREMENT=20 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `users`
+--
+
+LOCK TABLES `users` WRITE;
+/*!40000 ALTER TABLE `users` DISABLE KEYS */;
+INSERT INTO `users` VALUES (18,'Edrick','Hong','2026-01-23 16:19:50','edrickhong@gmail.com','user','active','scrypt:32768:8:1$6lVDDOHcwHbwunf2$a0552890a52b73e9a15a931a7366071780a8a668b2ddd87bc10b654382b6448d5d1c3b933e6dce5337c994feff60b28f415272c7ce58501af6430d0a47f1542a','users/2/avatar/204351e0-3360-4a61-a15b-48aa9899b3c1_test.jpg'),(19,'John','Doe','2026-01-26 13:05:00','johndoe.forumservice@gmail.com','super','active','scrypt:32768:8:1$6ItYtVG827g8m55P$c10ca9b596a2feaccc126f20c62ce70149e748dd72bb55a6f3d16550ce6f04ca8ab03bf04a8a619c66870b18e91d0c5fe052e8cfcd013eaf895dd5ed24fc8ef2','users/2/avatar/204351e0-3360-4a61-a15b-48aa9899b3c1_test.jpg');
+/*!40000 ALTER TABLE `users` ENABLE KEYS */;
+UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
@@ -46,4 +56,4 @@ CREATE TABLE `users` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-01-26 15:53:56
+-- Dump completed on 2026-01-26 15:59:21

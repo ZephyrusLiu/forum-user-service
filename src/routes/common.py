@@ -34,7 +34,7 @@ def handle_email(user_id, email):
     token = None
     try:
         token = secrets.token_urlsafe(32)
-        alt_code = generate_code(5)
+        alt_code = generate_code(6)
         publish_event("user.verify_email", 
                       {"userID" : user_id, "email" : email, "token" : token, "code" : alt_code})
 
