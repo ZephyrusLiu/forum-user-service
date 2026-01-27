@@ -6,7 +6,7 @@ from werkzeug.security import generate_password_hash
 from ..user_db import engine, users_table
 from .common import get_jwt_token, handle_email
 from utils.python.message import RMessage, RErrorMessage, RResponse
-from utils.python.auth import login_required
+from utils.python.auth import login_required, permission_checking
 
 from enum import Enum
 
@@ -24,10 +24,13 @@ def _get_role(user, other_id):
     role = user["role"]
     user_id = int(user["userId"])
 
+    if user_id == other_id:
+        return Role.Self
+
     match role:
         case "admin": return Role.Admin
         case "super": return Role.Super
-        case _: return Role.Self if other_id == user_id else Role.NA
+        case _: return Role.NA
 
 
 def _is_barred(role, field):
@@ -39,6 +42,27 @@ def _is_barred(role, field):
     return field in barred[role]
 
 
+@private_bp.route("/list", methods=["GET"])
+@login_required
+@permission_checking("admin","super")
+def list_users():
+    with engine.begin() as conn:
+        result = conn.execute(
+            select(
+                users_table.c.id,
+                users_table.c.firstName,
+                users_table.c.lastName,
+                users_table.c.email,
+                users_table.c.type,
+                users_table.c.status,
+                users_table.c.joinDate,
+            )
+        )
+
+        users = [dict(row._mapping) for row in result]
+
+    return RMessage().add("users",users).get()
+
 @private_bp.route("/ping", methods=["GET"])
 @login_required
 def ping():
@@ -48,9 +72,6 @@ def ping():
 @private_bp.route("/reverify", methods=["POST"])
 @login_required
 def reverify():
-    data = request.get_json()
-    if not data:
-        return RErrorMessage("Missing JSON body", 400).get()
 
     user_id = int(g.user["userId"])
 
@@ -82,6 +103,7 @@ def get_profile(user_id):
         users_table.c.id,
         users_table.c.firstName,
         users_table.c.lastName,
+        users_table.c.email,
         users_table.c.joinDate,
         users_table.c.type,
         users_table.c.status,
@@ -97,6 +119,7 @@ def get_profile(user_id):
         return RResponse().add("id", user["id"]) \
             .add("firstName", user["firstName"]) \
             .add("lastName", user["lastName"]) \
+            .add("email", user["email"]) \
             .add("joinDate", user["joinDate"].isoformat()) \
             .add("type", user["type"]) \
             .add("status", user["status"]) \
